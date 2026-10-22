@@ -1,0 +1,23 @@
+name: Neural Git TUI / TypeScript and history
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Real Git history regression
+        run: npm test
+      - name: Install and compile TUI
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
