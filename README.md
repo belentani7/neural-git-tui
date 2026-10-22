@@ -59,3 +59,6 @@ Si no se pasa `--repo`, se usa el directorio actual.
 ## Licencia
 
 MIT
+## Lectura de historial con cuerpos completos
+
+El lector de commits usa separadores de registro propios de `git log` para preservar párrafos, fechas, referencias y el mensaje completo. La representación ASCII `git log --graph` no se mezcla con los datos del grafo neuronal: el trazado de conexiones lo gestiona la interfaz visual. `npm test` comprueba este contrato con un repositorio Git local real, sin red ni credenciales.
