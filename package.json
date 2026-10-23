@@ -10,7 +10,9 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "package": "pkg dist/index.js --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --output neural-git"
+    "package": "pkg dist/index.js --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --output neural-git",
+    "test": "node --test tests/*.test.mjs",
+    "verify": "npm run build && npm test"
   },
   "keywords": [
     "git",
