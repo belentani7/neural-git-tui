@@ -56,7 +56,7 @@ export class GitParser {
   }
 
   async getCommits(options: GitLogOptions = {}): Promise<GitCommit[]> {
-    const args = ['log', `--format=${LOG_FORMAT_STRING}`];
+    const args = ['log', `--format=%x1e${LOG_FORMAT_STRING}`];
 
     if (options.maxCount) args.push(`-n${options.maxCount}`);
     if (options.since) args.push(`--since=${options.since.toISOString()}`);
@@ -72,7 +72,9 @@ export class GitParser {
 
   private parseCommits(output: string): GitCommit[] {
     const commits: GitCommit[] = [];
-    const entries = output.trim().split('\n\n').filter(Boolean);
+    // Git commit bodies can contain blank lines. A record separator in the
+    // pretty format marks real commit boundaries without truncating messages.
+    const entries = output.split('\x1e').map(entry => entry.trim()).filter(Boolean);
 
     for (const entry of entries) {
       const lines = entry.split('\n');
