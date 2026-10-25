@@ -87,7 +87,9 @@ export class GitParser {
   }
 
   async getDiff(commitHash: string, parentHash?: string): Promise<GitDiff> {
-    const parent = parentHash || `${commitHash}^`;
+    // Root commits have no ^ parent; compare against Git's canonical empty tree.
+    const parents = parentHash ? [parentHash] : (await this.git.raw(['rev-list', '--parents', '-n', '1', commitHash])).trim().split(/\s+/).slice(1);
+    const parent = parents[0] || '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
     const diffSummary = await this.git.diffSummary([parent, commitHash]);
     const files: GitFileChange[] = diffSummary.files.map((f: any) => ({
       path: f.file,
