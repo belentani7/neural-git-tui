@@ -84,6 +84,8 @@ export class NeuralCanvas {
     this.renderNeurons();
     this.renderParticles();
     this.renderUI();
+    // The app drives renderFrame directly; without setContent the canvas stays blank.
+    this.box.setContent(this.canvasToString());
   }
 
   private clearCanvas(): void {
