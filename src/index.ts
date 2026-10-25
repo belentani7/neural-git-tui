@@ -6,6 +6,7 @@ import { renderCommitPanel } from './ui/panels/CommitPanel.js';
 import { renderBranchPanel } from './ui/panels/BranchPanel.js';
 import { renderFileTreePanel } from './ui/panels/FileTreePanel.js';
 import { renderSearchPanel, searchCommits, SearchResult } from './ui/panels/SearchPanel.js';
+import { editSearchQuery, nextNeuronId } from './ui/interaction.mjs';
 import { THEME } from './utils/theme.js';
 import { detectCapabilities, getTerminalSize, enableAlternateScreen, disableAlternateScreen, rawMode, hideCursor, showCursor } from './utils/terminal.js';
 import { GitDiff, ParsedGitData } from './git/types.js';
@@ -39,7 +40,7 @@ function getRepoPath(): string {
   const args = process.argv.slice(2);
   const repoArg = args.find(a => a.startsWith('--repo='));
   if (repoArg) {
-    return resolve(repoArg.split('=')[1]);
+    return resolve(repoArg.slice('--repo='.length) || '.');
   }
   return process.cwd();
 }
@@ -54,6 +55,8 @@ class NeuralGitTUI {
   private animationInterval: NodeJS.Timeout | null = null;
   private lastFrameTime: number = 0;
   private repoPath: string;
+  private activeOverlay: Widgets.BoxElement | null = null;
+  private animationEnabled = process.env.REDUCE_MOTION !== '1';
 
   constructor(repoPath: string) {
     this.repoPath = repoPath;
@@ -116,7 +119,8 @@ class NeuralGitTUI {
       this.state.parsedData = await this.parser.parseAll({ maxCount: 2000 });
       this.state.network = this.builder.build(this.state.parsedData);
 
-      const canvasWidth = Math.floor(size.width * (1 - PANEL_WIDTH_RATIO));
+      const panelWidth = Math.max(1, Math.min(size.width - 1, Math.max(28, Math.floor(size.width * PANEL_WIDTH_RATIO))));
+      const canvasWidth = Math.max(1, size.width - panelWidth);
       this.canvas = createNeuralCanvas({
         width: canvasWidth,
         height: size.height,
@@ -124,7 +128,7 @@ class NeuralGitTUI {
       });
       this.canvas.setNetwork(this.state.network);
 
-      this.panelBox.width = Math.max(MIN_PANEL_WIDTH, Math.floor(size.width * PANEL_WIDTH_RATIO));
+      this.panelBox.width = panelWidth;
       this.panelBox.left = canvasWidth;
 
       this.state.isLoading = false;
@@ -141,6 +145,11 @@ class NeuralGitTUI {
 
   private startAnimation(): void {
     this.lastFrameTime = performance.now();
+    if (!this.animationEnabled) {
+      this.canvas?.renderFrame(0);
+      this.screen.render();
+      return;
+    }
     this.animationInterval = setInterval(() => {
       const now = performance.now();
       const deltaTime = now - this.lastFrameTime;
@@ -162,60 +171,56 @@ class NeuralGitTUI {
   }
 
   private setupKeybindings(): void {
-    this.screen.key(['q', 'C-c', 'escape'], () => {
-      this.quit();
-    });
+    // A single dispatcher prevents global shortcuts from swallowing search input.
+    this.screen.on('keypress', (ch: string | undefined, key: { name?: string; ctrl?: boolean; meta?: boolean } = {}) => {
+      const name = key.name || '';
+      if (key.ctrl && name === 'c') { this.quit(); return; }
+      if (this.activeOverlay) return;
 
-    this.screen.key(['tab'], () => {
-      this.cyclePanel();
-    });
+      if (this.state.isSearching) {
+        if (name === 'escape') {
+          this.state.searchQuery = '';
+          this.state.searchResults = [];
+          this.state.searchSelectedIndex = 0;
+          this.setPanel('commit');
+          return;
+        }
+        if (name === 'enter' || name === 'return') { this.handleEnter(); return; }
+        if (name === 'up' || name === 'down') {
+          const step = name === 'up' ? -1 : 1;
+          this.state.searchSelectedIndex = Math.max(0, Math.min(this.state.searchResults.length - 1, this.state.searchSelectedIndex + step));
+          this.renderPanel();
+          this.screen.render();
+          return;
+        }
+        if (key.ctrl || key.meta) return;
+        const query = editSearchQuery(this.state.searchQuery, name, ch);
+        if (query !== this.state.searchQuery) {
+          this.state.searchQuery = query;
+          this.state.searchResults = this.state.network ? searchCommits(this.state.network, query) : [];
+          this.state.searchSelectedIndex = 0;
+          this.renderPanel();
+          this.screen.render();
+        }
+        return;
+      }
 
-    this.screen.key(['f', '/'], () => {
-      this.startSearch();
-    });
-
-    this.screen.key(['enter'], () => {
-      this.handleEnter();
-    });
-
-    this.screen.key(['b'], () => {
-      this.setPanel('branches');
-    });
-
-    this.screen.key(['c'], () => {
-      this.setPanel('commit');
-    });
-
-    this.screen.key(['t'], () => {
-      this.setPanel('files');
-    });
-
-    this.screen.key(['r'], () => {
-      this.resetView();
-    });
-
-    this.screen.key(['space'], () => {
-      this.toggleAnimation();
-    });
-
-    this.screen.key(['?'], () => {
-      this.showHelp();
-    });
-
-    this.screen.key(['h', 'left'], () => {
-      this.navigateCanvas('left');
-    });
-
-    this.screen.key(['l', 'right'], () => {
-      this.navigateCanvas('right');
-    });
-
-    this.screen.key(['j', 'down'], () => {
-      this.navigateCanvas('down');
-    });
-
-    this.screen.key(['k', 'up'], () => {
-      this.navigateCanvas('up');
+      if (key.ctrl || key.meta) return;
+      if (name === 'q' || name === 'escape') { this.quit(); return; }
+      if (name === 'tab') { this.cyclePanel(); return; }
+      if (name === 'f' || name === '/' || ch === '/') { this.startSearch(); return; }
+      if (name === 'enter' || name === 'return') { this.handleEnter(); return; }
+      if (name === 'b') { this.setPanel('branches'); return; }
+      if (name === 'c') { this.setPanel('commit'); return; }
+      if (name === 't') { this.setPanel('files'); return; }
+      if (name === 'r') { this.resetView(); return; }
+      if (name === 'space') { this.toggleAnimation(); return; }
+      if (ch === '?' || name === '?') { this.showHelp(); return; }
+      const directions: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+        h: 'left', left: 'left', l: 'right', right: 'right',
+        j: 'down', down: 'down', k: 'up', up: 'up',
+      };
+      if (directions[name]) this.navigateCanvas(directions[name]);
     });
   }
 
@@ -227,14 +232,15 @@ class NeuralGitTUI {
 
   private handleResize(): void {
     const size = getTerminalSize();
-    const canvasWidth = Math.floor(size.width * (1 - PANEL_WIDTH_RATIO));
-    const panelWidth = Math.max(MIN_PANEL_WIDTH, Math.floor(size.width * PANEL_WIDTH_RATIO));
+    const panelWidth = Math.max(1, Math.min(size.width - 1, Math.max(28, Math.floor(size.width * PANEL_WIDTH_RATIO))));
+    const canvasWidth = Math.max(1, size.width - panelWidth);
 
     this.state.terminalWidth = size.width;
     this.state.terminalHeight = size.height;
 
     if (this.canvas) {
       this.canvas.resize(canvasWidth, size.height);
+      this.canvas.renderFrame(0);
     }
 
     this.panelBox.width = panelWidth;
@@ -294,7 +300,8 @@ class NeuralGitTUI {
     if (!this.state.network) return;
 
     this.builder.selectNeuron(this.state.network, neuronId);
-    this.loadDiff(neuronId);
+    this.state.diff = null;
+    void this.loadDiff(neuronId);
     this.renderPanel();
     this.screen.render();
   }
@@ -313,8 +320,12 @@ class NeuralGitTUI {
   }
 
   private navigateCanvas(direction: 'up' | 'down' | 'left' | 'right'): void {
-    // Navigation logic would be implemented here
-    // For now, just re-render
+    if (!this.state.network) return;
+    const network = this.state.network;
+    const nextId = nextNeuronId(network.neurons, network.hoveredNeuronId || network.selectedNeuronId, direction);
+    if (!nextId) return;
+    this.builder.hoverNeuron(network, nextId);
+    this.canvas?.renderFrame(0);
     this.screen.render();
   }
 
@@ -330,7 +341,9 @@ class NeuralGitTUI {
   private toggleAnimation(): void {
     if (this.animationInterval) {
       this.stopAnimation();
+      this.animationEnabled = false;
     } else {
+      this.animationEnabled = true;
       this.startAnimation();
     }
   }
@@ -385,8 +398,10 @@ Panels:
       mouse: true,
     });
 
+    this.activeOverlay = overlay;
     overlay.focus();
     overlay.key(['escape', 'q', 'enter'], () => {
+      this.activeOverlay = null;
       overlay.destroy();
       this.screen.render();
     });
@@ -397,8 +412,12 @@ Panels:
   private renderPanel(): void {
     if (!this.panelBox) return;
 
-    const panelWidth = Math.max(MIN_PANEL_WIDTH, Math.floor(this.state.terminalWidth * PANEL_WIDTH_RATIO));
+    const panelWidth = Math.max(1, Math.min(this.state.terminalWidth - 1, Math.max(28, Math.floor(this.state.terminalWidth * PANEL_WIDTH_RATIO))));
     const panelHeight = this.state.terminalHeight;
+    if (panelWidth < 24 || panelHeight < 12) {
+      this.panelBox.setContent('Terminal too small. Resize to at least 34 columns and 12 rows.');
+      return;
+    }
 
     let content: string;
 
