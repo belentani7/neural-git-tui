@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import blessed, { Widgets } from 'blessed';
 import { GitParser } from './git/parser.js';
 import { createBuilder, NeuralGraphBuilder, NeuralNetwork } from './neural/index.js';
