@@ -243,7 +243,6 @@ class NeuralGitTUI {
 
     if (this.canvas) {
       this.canvas.resize(canvasWidth, size.height);
-      this.canvas.renderFrame(0);
     }
 
     this.panelBox.width = panelWidth;
@@ -251,6 +250,7 @@ class NeuralGitTUI {
 
     if (this.state.network) {
       this.builder.rescale(this.state.network, canvasWidth, size.height);
+      this.canvas?.renderFrame(0);
     }
 
     this.renderPanel();
@@ -341,6 +341,8 @@ class NeuralGitTUI {
   private resetView(): void {
     if (this.state.network) {
       this.builder.selectNeuron(this.state.network, null);
+      this.builder.hoverNeuron(this.state.network, null);
+      this.canvas?.renderFrame(0);
     }
     ++this.diffRequestId;
     this.state.diff = null;
