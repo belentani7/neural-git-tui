@@ -22,6 +22,7 @@ interface AppState {
   parsedData: ParsedGitData | null;
   network: NeuralNetwork | null;
   diff: GitDiff | null;
+  diffError: string | null;
   selectedPanel: PanelType;
   searchQuery: string;
   searchResults: SearchResult[];
@@ -56,6 +57,7 @@ class NeuralGitTUI {
   private lastFrameTime: number = 0;
   private repoPath: string;
   private activeOverlay: Widgets.BoxElement | null = null;
+  private diffRequestId = 0;
   private animationEnabled = process.env.REDUCE_MOTION !== '1';
 
   constructor(repoPath: string) {
@@ -75,6 +77,7 @@ class NeuralGitTUI {
       parsedData: null,
       network: null,
       diff: null,
+      diffError: null,
       selectedPanel: 'commit',
       searchQuery: '',
       searchResults: [],
@@ -301,22 +304,28 @@ class NeuralGitTUI {
 
     this.builder.selectNeuron(this.state.network, neuronId);
     this.state.diff = null;
+    this.state.diffError = null;
     void this.loadDiff(neuronId);
     this.renderPanel();
     this.screen.render();
   }
 
   private async loadDiff(neuronId: string): Promise<void> {
-    if (!this.state.network) return;
-    const neuron = this.state.network.neurons.get(neuronId);
+    const requestId = ++this.diffRequestId;
+    const neuron = this.state.network?.neurons.get(neuronId);
     if (!neuron) return;
-
     try {
-      this.state.diff = await this.parser.getDiff(neuron.commit.hash, neuron.commit.parents[0]);
-      this.renderPanel();
-    } catch (error) {
-      console.error('Failed to load diff:', error);
+      const diff = await this.parser.getDiff(neuron.commit.hash, neuron.commit.parents[0]);
+      if (requestId !== this.diffRequestId) return; // Ignore stale async results.
+      this.state.diff = diff;
+      this.state.diffError = null;
+    } catch {
+      if (requestId !== this.diffRequestId) return;
+      this.state.diff = null;
+      this.state.diffError = 'Could not load the selected commit diff.';
     }
+    this.renderPanel();
+    this.screen.render();
   }
 
   private navigateCanvas(direction: 'up' | 'down' | 'left' | 'right'): void {
@@ -333,7 +342,9 @@ class NeuralGitTUI {
     if (this.state.network) {
       this.builder.selectNeuron(this.state.network, null);
     }
+    ++this.diffRequestId;
     this.state.diff = null;
+    this.state.diffError = null;
     this.renderPanel();
     this.screen.render();
   }
@@ -452,7 +463,7 @@ Panels:
           height: panelHeight,
           diff: this.state.diff,
         });
-        content = lines.join('\n');
+        content = this.state.diffError ? `FILE CHANGES\n\n${this.state.diffError}` : lines.join('\n');
         break;
       }
       case 'search': {
