@@ -27,7 +27,7 @@ const LOG_FORMAT = {
 
 const LOG_FORMAT_STRING = Object.entries(LOG_FORMAT)
   .map(([key, value]) => `${key}:${value}`)
-  .join('%x1f') + '%x1e';
+  .join('%x00') + '%x00%x00';
 
 export class GitParser {
   private git: SimpleGit;
