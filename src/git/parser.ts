@@ -1,4 +1,5 @@
-import { simpleGit, SimpleGit, LogResult, BranchSummary } from 'simple-git';
+import { simpleGit, SimpleGit, BranchSummary } from 'simple-git';
+import { parseGitLog } from './parse-log.mjs';
 import {
   GitCommit,
   GitBranch,
@@ -26,7 +27,7 @@ const LOG_FORMAT = {
 
 const LOG_FORMAT_STRING = Object.entries(LOG_FORMAT)
   .map(([key, value]) => `${key}:${value}`)
-  .join('%x1f');
+  .join('%x00') + '%x00%x00';
 
 export class GitParser {
   private git: SimpleGit;
@@ -56,7 +57,7 @@ export class GitParser {
   }
 
   async getCommits(options: GitLogOptions = {}): Promise<GitCommit[]> {
-    const args = ['log', `--format=%x1e${LOG_FORMAT_STRING}`];
+    const args = ['log', `--format=${LOG_FORMAT_STRING}`];
 
     if (options.maxCount) args.push(`-n${options.maxCount}`);
     if (options.since) args.push(`--since=${options.since.toISOString()}`);
@@ -64,57 +65,10 @@ export class GitParser {
     if (options.author) args.push(`--author=${options.author}`);
     if (options.branch) args.push(options.branch);
     if (options.all) args.push('--all');
-    if (options.graph) args.push('--graph');
+    // Graph drawing is performed by the neural UI; ASCII --graph corrupts machine-readable fields.
 
     const output = await this.git.raw(args);
-    return this.parseCommits(output);
-  }
-
-  private parseCommits(output: string): GitCommit[] {
-    const commits: GitCommit[] = [];
-    // Git commit bodies can contain blank lines. A record separator in the
-    // pretty format marks real commit boundaries without truncating messages.
-    const entries = output.split('\x1e').map(entry => entry.trim()).filter(Boolean);
-
-    for (const entry of entries) {
-      const lines = entry.split('\n');
-      const commit: Partial<GitCommit> = {};
-      let bodyLines: string[] = [];
-      let inBody = false;
-
-      for (const line of lines) {
-        if (!inBody && line.includes('\x1f')) {
-          const parts = line.split('\x1f');
-          for (const part of parts) {
-            const [key, ...valueParts] = part.split(':');
-            const value = valueParts.join(':');
-            switch (key) {
-              case 'hash': commit.hash = value; break;
-              case 'shortHash': commit.shortHash = value; break;
-              case 'message': commit.message = value; break;
-              case 'authorName': commit.authorName = value; break;
-              case 'authorEmail': commit.authorEmail = value; break;
-              case 'authorDate': commit.authorDate = new Date(value); break;
-              case 'committerName': commit.committerName = value; break;
-              case 'committerEmail': commit.committerEmail = value; break;
-              case 'committerDate': commit.committerDate = new Date(value); break;
-              case 'parents': commit.parents = value ? value.split(' ').filter(Boolean) : []; break;
-              case 'refs': commit.refs = value ? value.split(', ').filter(Boolean) : []; break;
-              case 'body': bodyLines = [value]; inBody = true; break;
-            }
-          }
-        } else if (inBody) {
-          bodyLines.push(line);
-        }
-      }
-
-      if (commit.hash) {
-        commit.body = bodyLines.join('\n').trim();
-        commits.push(commit as GitCommit);
-      }
-    }
-
-    return commits;
+    return parseGitLog(output);
   }
 
   async getBranches(): Promise<GitBranch[]> {
@@ -133,7 +87,9 @@ export class GitParser {
   }
 
   async getDiff(commitHash: string, parentHash?: string): Promise<GitDiff> {
-    const parent = parentHash || `${commitHash}^`;
+    // Root commits have no ^ parent; compare against Git's canonical empty tree.
+    const parents = parentHash ? [parentHash] : (await this.git.raw(['rev-list', '--parents', '-n', '1', commitHash])).trim().split(/\s+/).slice(1);
+    const parent = parents[0] || '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
     const diffSummary = await this.git.diffSummary([parent, commitHash]);
     const files: GitFileChange[] = diffSummary.files.map((f: any) => ({
       path: f.file,
@@ -167,8 +123,10 @@ export class GitParser {
   }
 
   async getFileTree(commitHash: string = 'HEAD'): Promise<string[]> {
-    const output = await this.git.raw(['ls-tree', '-r', '--name-only', commitHash]);
-    return output.trim().split('\n').filter(Boolean);
+    // -z disables Git's C-style quoting and preserves valid filenames containing
+    // newlines, tabs or non-ASCII characters. Git paths cannot contain NUL.
+    const output = await this.git.raw(['ls-tree', '-r', '-z', '--name-only', commitHash]);
+    return output.split('\x00').filter(Boolean);
   }
 
   async parseAll(options: GitLogOptions = {}): Promise<ParsedGitData> {
