@@ -123,8 +123,10 @@ export class GitParser {
   }
 
   async getFileTree(commitHash: string = 'HEAD'): Promise<string[]> {
-    const output = await this.git.raw(['ls-tree', '-r', '--name-only', commitHash]);
-    return output.trim().split('\n').filter(Boolean);
+    // -z disables Git's C-style quoting and preserves valid filenames containing
+    // newlines, tabs or non-ASCII characters. Git paths cannot contain NUL.
+    const output = await this.git.raw(['ls-tree', '-r', '-z', '--name-only', commitHash]);
+    return output.split('\x00').filter(Boolean);
   }
 
   async parseAll(options: GitLogOptions = {}): Promise<ParsedGitData> {
