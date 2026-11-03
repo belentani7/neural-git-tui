@@ -1,0 +1,34 @@
+---
+description: Contexto, stack y convenciones base del proyecto
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Proyecto: belentani7__neural-git-tui
+
+Stack detectado: ci, node, tests, typescript.
+Gestores de paquetes: npm.
+Tests: no detectados.
+
+## Protocolo
+
+1. Spec-first: PRD → SRS → Design Doc → ADR → Plan → tests GWT.
+2. Cambios pequeños, reversibles y con verificación real.
+3. Conventional commits: `type(scope): summary`.
+4. No commitear secretos ni credenciales.
+5. No ejecutar TypeScript sin compilar en producción.
+
+## Comandos
+
+- `dev`: `tsx src/index.ts`
+- `build`: `tsc`
+- `start`: `node dist/index.js`
+- `package`: `pkg dist/index.js --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --output neural-git`
+- `test`: `node --test tests/*.test.mjs`
+- `verify`: `npm run build && npm test`
+
+## Verificación mínima
+
+- Tests del stack en verde.
+- Build reproducible.
+- `gitleaks detect --source . --redact` limpio.
