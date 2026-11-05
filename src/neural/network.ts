@@ -96,7 +96,7 @@ export class NeuralGraphBuilder {
 
     const simulation = forceSimulation(nodes as any)
       .force('charge', forceManyBody().strength(-this.config.repulsion))
-      .force('link', forceLink(links as any).id((d: any) => d.id).distance(this.config.maxDistance).strength(this.config.attraction))
+      .force('link', forceLink(links as any).id((d: unknown) => d.id).distance(this.config.maxDistance).strength(this.config.attraction))
       .force('center', forceCenter(0, 0))
       .force('collide', forceCollide().radius(d => (d as Neuron).radius + 2).strength(0.5))
       .alphaDecay(0.02)

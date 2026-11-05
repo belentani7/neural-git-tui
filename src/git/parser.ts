@@ -51,7 +51,7 @@ export class GitParser {
       currentBranch: branch.current,
       headHash: headHash.trim(),
       isBare: !isBare,
-      remotes: remotes.map((r: any) => r.name),
+      remotes: remotes.map((r: unknown) => r.name),
     };
   }
 
@@ -120,8 +120,8 @@ export class GitParser {
   async getBranches(): Promise<GitBranch[]> {
     const summary: BranchSummary = await this.git.branch(['-a', '-v']);
     return Object.values(summary.branches)
-      .filter((b: any) => !b.name.startsWith('HEAD'))
-      .map((b: any) => ({
+      .filter((b: unknown) => !b.name.startsWith('HEAD'))
+      .map((b: unknown) => ({
         name: b.name.replace(/^remotes\//, ''),
         hash: b.commit,
         isRemote: b.name.startsWith('remotes/'),
@@ -135,7 +135,7 @@ export class GitParser {
   async getDiff(commitHash: string, parentHash?: string): Promise<GitDiff> {
     const parent = parentHash || `${commitHash}^`;
     const diffSummary = await this.git.diffSummary([parent, commitHash]);
-    const files: GitFileChange[] = diffSummary.files.map((f: any) => ({
+    const files: GitFileChange[] = diffSummary.files.map((f: unknown) => ({
       path: f.file,
       status: this.mapStatus(f.type),
       additions: f.insertions,
