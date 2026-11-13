@@ -59,3 +59,7 @@ Si no se pasa `--repo`, se usa el directorio actual.
 ## Licencia
 
 MIT
+
+
+## Producto
+Véase `plataforma/OFERTA.md`, `plataforma/precios.json`, `plataforma/ONEPAGER.md`.
