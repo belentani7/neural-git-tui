@@ -1,5 +1,6 @@
 import { Vec2 } from '../utils/math.js';
 import { GitCommit, GitBranch } from '../git/types.js';
+import type { Theme } from '../utils/theme.js';
 
 export type NeuronType = 'commit' | 'merge' | 'root' | 'head' | 'tag';
 export type SynapseType = 'parent' | 'child' | 'merge' | 'branch';
@@ -150,7 +151,7 @@ export function createSynapse(
   };
 }
 
-export function getNeuronColor(type: NeuronType, theme: unknown): string {
+export function getNeuronColor(type: NeuronType, theme: Theme): string {
   switch (type) {
     case 'head': return theme.colors.neonRed;
     case 'merge': return theme.colors.goldZion;
@@ -160,7 +161,7 @@ export function getNeuronColor(type: NeuronType, theme: unknown): string {
   }
 }
 
-export function getSynapseColor(type: SynapseType, theme: unknown): string {
+export function getSynapseColor(type: SynapseType, theme: Theme): string {
   switch (type) {
     case 'merge': return theme.colors.mergeGlow;
     case 'branch': return theme.colors.branchHighlight;

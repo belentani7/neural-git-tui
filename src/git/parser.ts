@@ -51,7 +51,7 @@ export class GitParser {
       currentBranch: branch.current,
       headHash: headHash.trim(),
       isBare: !isBare,
-      remotes: remotes.map((r: unknown) => r.name),
+      remotes: remotes.map((r) => r.name),
     };
   }
 
@@ -120,13 +120,13 @@ export class GitParser {
   async getBranches(): Promise<GitBranch[]> {
     const summary: BranchSummary = await this.git.branch(['-a', '-v']);
     return Object.values(summary.branches)
-      .filter((b: unknown) => !b.name.startsWith('HEAD'))
-      .map((b: unknown) => ({
+      .filter((b) => !b.name.startsWith('HEAD'))
+      .map((b) => ({
         name: b.name.replace(/^remotes\//, ''),
         hash: b.commit,
         isRemote: b.name.startsWith('remotes/'),
         isHead: b.current,
-        upstream: b.upstream,
+        upstream: (b as { upstream?: string }).upstream,
         ahead: 0,
         behind: 0,
       }));
@@ -135,13 +135,23 @@ export class GitParser {
   async getDiff(commitHash: string, parentHash?: string): Promise<GitDiff> {
     const parent = parentHash || `${commitHash}^`;
     const diffSummary = await this.git.diffSummary([parent, commitHash]);
-    const files: GitFileChange[] = diffSummary.files.map((f: unknown) => ({
-      path: f.file,
-      status: this.mapStatus(f.type),
-      additions: f.insertions,
-      deletions: f.deletions,
-      binary: f.binary,
-    }));
+    const files: GitFileChange[] = diffSummary.files.map((f) => {
+      const d = f as {
+        file: string;
+        type?: string;
+        status?: string;
+        insertions?: number;
+        deletions?: number;
+        binary?: boolean;
+      };
+      return {
+        path: d.file,
+        status: this.mapStatus(d.type ?? d.status ?? 'modified'),
+        additions: d.insertions ?? 0,
+        deletions: d.deletions ?? 0,
+        binary: d.binary ?? false,
+      };
+    });
 
     return {
       commitHash,
